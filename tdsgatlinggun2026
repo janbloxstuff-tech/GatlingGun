@@ -9,7 +9,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 -- 1. Setup Core Framework & State Management
 getgenv().gatlingcooldown = 0.05
 getgenv().multiplytimes = 10
-getgenv().norecoil = true
+getgenv().norecoil = true 
 
 -- Hooks into game networking and animators
 local ggchannel = require(game:GetService("ReplicatedStorage").Resources.Universal.NewNetwork).Channel("GatlingGun")
@@ -18,10 +18,8 @@ local gganim = require(game:GetService("ReplicatedStorage").Content.Tower["Gatli
 gganim._fireGun = function(arg1)
     local canFire = true
     
-    if arg1.Replicator then
-        if arg1.Replicator:Get("Reloading") == true or not arg1.Replicator:Get("CanFire") then
-            canFire = false
-        end
+    if arg1.Replicator and arg1.Replicator:Get("Minigun") then
+        canFire = arg1.Replicator:Get("CanFire")
     end
     
     local camcontroller = require(game:GetService("ReplicatedStorage").Content.Tower["Gatling Gun"].Animator.CameraController)
@@ -59,6 +57,7 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "GatlingModGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 9999 -- Forces the container above other game interfaces
 ScreenGui.Parent = playerGui
 
 -- Toggle Button Fixed to Top Left Corner
@@ -78,16 +77,16 @@ ToggleCorner.CornerRadius = UDim.new(0, 6)
 ToggleCorner.Parent = ToggleButton
 ToggleButton.Parent = ScreenGui
 
--- Base Frame Grouping Container (Holds Header Bar + Content Container safely together)
+-- Base Frame Grouping Container
 local BaseWindow = Instance.new("Frame")
 BaseWindow.Name = "BaseWindow"
-BaseWindow.Size = UDim2.new(0, 260, 0, 210)
-BaseWindow.Position = UDim2.new(0.5, -130, 0.4, -105)
+BaseWindow.Size = UDim2.new(0, 260, 0, 165)
+BaseWindow.Position = UDim2.new(0.5, -130, 0.4, -82)
 BaseWindow.BackgroundTransparency = 1
 BaseWindow.Visible = true
 BaseWindow.Parent = ScreenGui
 
--- Frame Header Title Bar (Explicitly anchored out of layout flow at the strict top)
+-- Frame Header Title Bar (Acts as the exclusive drag handle at the top)
 local TitleLabel = Instance.new("TextButton") 
 TitleLabel.Name = "TitleLabel"
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
@@ -106,7 +105,6 @@ TitleCorner.CornerRadius = UDim.new(0, 6)
 TitleCorner.Parent = TitleLabel
 TitleLabel.Parent = BaseWindow
 
--- Clean Up bottom rounded corners on title bar to attach seamlessly to main frame
 local TitleBottomFlatten = Instance.new("Frame")
 TitleBottomFlatten.Size = UDim2.new(1, 0, 0, 6)
 TitleBottomFlatten.Position = UDim2.new(0, 0, 1, -6)
@@ -115,7 +113,7 @@ TitleBottomFlatten.BorderSizePixel = 0
 TitleBottomFlatten.ZIndex = 2
 TitleBottomFlatten.Parent = TitleLabel
 
--- Main Content Panel (Holds checkboxes/sliders independently below header)
+-- Main Content Panel
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -135,55 +133,10 @@ UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Parent = MainFrame
 
 local FramePadding = Instance.new("UIPadding")
-FramePadding.PaddingTop = UDim.new(0, 10)
+FramePadding.PaddingTop = UDim.new(0, 12)
 FramePadding.Parent = MainFrame
 
 MainFrame.Parent = BaseWindow
-
--- Utility Component Construction for Toggles
-local function createToggleRow(name, labelText, globalVar, layoutOrder)
-    local Row = Instance.new("Frame")
-    Row.Size = UDim2.new(0, 240, 0, 32)
-    Row.BackgroundTransparency = 1
-    Row.LayoutOrder = layoutOrder
-    
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0, 150, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = labelText
-    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    Label.TextSize = 13
-    Label.Font = Enum.Font.SourceSans
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Row
-    
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, 75, 0, 26)
-    Btn.Position = UDim2.new(1, -75, 0.5, -13)
-    Btn.BorderSizePixel = 0
-    Btn.Font = Enum.Font.SourceSansBold
-    Btn.TextSize = 11
-    
-    local function updateVisuals()
-        local state = getgenv()[globalVar]
-        Btn.Text = state and "ENABLED" or "DISABLED"
-        Btn.BackgroundColor3 = state and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(150, 61, 61)
-        Btn.TextColor3 = state and Color3.fromRGB(180, 255, 210) or Color3.fromRGB(255, 210, 210)
-    end
-    
-    Btn.MouseButton1Click:Connect(function()
-        getgenv()[globalVar] = not getgenv()[globalVar]
-        updateVisuals()
-    end)
-    
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 4)
-    BtnCorner.Parent = Btn
-    
-    updateVisuals()
-    Btn.Parent = Row
-    Row.Parent = MainFrame
-end
 
 -- Utility Component Construction for Sliders
 local function createSliderRow(name, labelText, globalVar, minVal, maxVal, isDecimal, layoutOrder)
@@ -281,16 +234,16 @@ local function createSliderRow(name, labelText, globalVar, minVal, maxVal, isDec
     Row.Parent = MainFrame
 end
 
-createToggleRow("NoRecoilToggle", "Remove Weapon Recoil", "norecoil", 1)
-createSliderRow("CooldownSlider", "Cooldown Delay (Sec)", "gatlingcooldown", 0.01, 0.5, true, 2)
-createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100, false, 3)
+-- Appending sliders with correct layouts
+createSliderRow("CooldownSlider", "Cooldown Delay (Sec)", "gatlingcooldown", 0.01, 0.5, true, 1)
+createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100, false, 2)
 
 -- 4. Open/Close Controller Connection
 ToggleButton.MouseButton1Click:Connect(function()
     BaseWindow.Visible = not BaseWindow.Visible
 end)
 
--- 5. Cross-Platform Dragging Engine (Binds mouse input on TitleLabel to slide BaseWindow)
+-- 5. Cross-Platform Dragging Engine (Linked ONLY to TitleLabel)
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
