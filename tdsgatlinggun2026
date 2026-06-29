@@ -9,7 +9,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 -- 1. Setup Core Framework & State Management
 getgenv().gatlingcooldown = 0.05
 getgenv().multiplytimes = 10
-getgenv().norecoil = true
+getgenv().norecoil = true -- Feature remains active in the background
 
 -- Hooks into game networking and animators
 local ggchannel = require(game:GetService("ReplicatedStorage").Resources.Universal.NewNetwork).Channel("GatlingGun")
@@ -64,12 +64,30 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "GatlingModGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999999 -- Guarantees the frame sits on top of other game UIs
 ScreenGui.Parent = playerGui
+
+-- Toggle Button Fixed to Top Left Corner
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 100, 0, 35)
+ToggleButton.Position = UDim2.new(0, 15, 0, 15)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+ToggleButton.TextColor3 = Color3.fromRGB(240, 240, 240)
+ToggleButton.TextSize = 14
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "Toggle Menu"
+ToggleButton.BorderSizePixel = 0
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.Parent = ToggleButton
+ToggleButton.Parent = ScreenGui
 
 -- Main Panel (Static Frame, moved only via Title)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 240) 
+MainFrame.Size = UDim2.new(0, 260, 0, 160) -- Adjusted height to properly fit contents
 MainFrame.Position = UDim2.new(0.5, -130, 0.4, -120)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
@@ -79,75 +97,43 @@ local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = MainFrame
 
--- Frame Header Title (This acts as the drag handle)
-local TitleLabel = Instance.new("TextButton") -- Changed to TextButton so it responds cleanly to PC clicks
+-- Frame Header Title (This acts as the drag handle - Anchored firmly at the top)
+local TitleLabel = Instance.new("TextButton")
 TitleLabel.Name = "TitleLabel"
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
-TitleLabel.BackgroundTransparency = 1
+TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35) -- Slightly darker accent for header distinction
+TitleLabel.BorderSizePixel = 0
 TitleLabel.Text = "Gatling Gun Mod Panel"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 16
+TitleLabel.TextSize = 15
 TitleLabel.Font = Enum.Font.SourceSansBold
 TitleLabel.AutoButtonColor = false
-TitleLabel.LayoutOrder = 1
 TitleLabel.Parent = MainFrame
 
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = TitleLabel
+
+-- Content Frame to house layout items safely under the Header
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, 0, 1, -35)
+ContentFrame.Position = UDim2.new(0, 0, 0, 35)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Padding = UDim.new(0, 8)
+UIListLayout.Padding = UDim.new(0, 6)
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Parent = MainFrame
+UIListLayout.Parent = ContentFrame
 
 local FramePadding = Instance.new("UIPadding")
-FramePadding.PaddingTop = UDim.new(0, 40)
-FramePadding.Parent = MainFrame
+FramePadding.PaddingTop = UDim.new(0, 10)
+FramePadding.Parent = ContentFrame
 
 MainFrame.Parent = ScreenGui
-
--- Utility Component Construction for Toggles
-local function createToggleRow(name, labelText, globalVar, layoutOrder)
-    local Row = Instance.new("Frame")
-    Row.Size = UDim2.new(0, 230, 0, 35)
-    Row.BackgroundTransparency = 1
-    Row.LayoutOrder = layoutOrder
-    
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0, 140, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = labelText
-    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    Label.TextSize = 14
-    Label.Font = Enum.Font.SourceSans
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Row
-    
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, 80, 0, 28)
-    Btn.Position = UDim2.new(1, -80, 0.5, -14)
-    Btn.BorderSizePixel = 0
-    Btn.Font = Enum.Font.SourceSansBold
-    Btn.TextSize = 12
-    
-    local function updateVisuals()
-        local state = getgenv()[globalVar]
-        Btn.Text = state and "ENABLED" or "DISABLED"
-        Btn.BackgroundColor3 = state and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(150, 61, 61)
-        Btn.TextColor3 = state and Color3.fromRGB(180, 255, 210) or Color3.fromRGB(255, 210, 210)
-    end
-    
-    Btn.MouseButton1Click:Connect(function()
-        getgenv()[globalVar] = not getgenv()[globalVar]
-        updateVisuals()
-    end)
-    
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 4)
-    BtnCorner.Parent = Btn
-    
-    updateVisuals()
-    Btn.Parent = Row
-    Row.Parent = MainFrame
-end
 
 -- Utility Component Construction for Sliders
 local function createSliderRow(name, labelText, globalVar, minVal, maxVal, isDecimal, layoutOrder)
@@ -242,15 +228,19 @@ local function createSliderRow(name, labelText, globalVar, minVal, maxVal, isDec
         end
     end)
     
-    Row.Parent = MainFrame
+    Row.Parent = ContentFrame
 end
 
--- Created components assigned layout order 9999
-createToggleRow("NoRecoilToggle", "Remove Weapon Recoil", "norecoil", 9999)
-createSliderRow("CooldownSlider", "Cooldown Delay (Sec)", "gatlingcooldown", 0.01, 0.5, true, 9999)
-createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100, false, 9999)
+-- Slider rows generated now inside ContentFrame
+createSliderRow("CooldownSlider", "Cooldown Delay (Sec)", "gatlingcooldown", 0.01, 0.5, true, 1)
+createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100, false, 2)
 
--- 4. Cross-Platform PC/Mobile Dragging Engine (Linked ONLY to TitleLabel)
+-- 4. Open/Close Controller Connection
+ToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- 5. Cross-Platform PC/Mobile Dragging Engine (Linked ONLY to TitleLabel)
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
