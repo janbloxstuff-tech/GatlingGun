@@ -9,7 +9,8 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 -- 1. Setup Core Framework & State Management
 getgenv().gatlingcooldown = 0.05
 getgenv().multiplytimes = 10
-getgenv().norecoil = true -- Feature remains active in the background
+getgenv().norecoil = true 
+getgenv().npcesp = false -- New ESP State Variable
 
 -- Hooks into game networking and animators
 local ggchannel = require(game:GetService("ReplicatedStorage").Resources.Universal.NewNetwork).Channel("GatlingGun")
@@ -19,11 +20,9 @@ gganim._fireGun = function(arg1)
     local canFire = true
     
     if arg1.Replicator then
-        -- Force a 1-second reload lock if the server says the weapon is reloading
         if arg1.Replicator:Get("Reloading") == true then
-            task.wait(1.0) -- Enforces a safe 1-second reload time limit
+            task.wait(1.0)
         end
-        
         if arg1.Replicator:Get("Minigun") then
             canFire = arg1.Replicator:Get("CanFire")
         end
@@ -33,7 +32,6 @@ gganim._fireGun = function(arg1)
     
     if canFire then
         arg1:_fire(camcontroller.position)
-        
         if not getgenv().norecoil then
             local stores = require(game:GetService("ReplicatedStorage").Client.Interfaces.Stores)
             stores.CrosshairStore.store:dispatch({
@@ -50,7 +48,6 @@ gganim._fireGun = function(arg1)
             ggchannel:fireServer("Fire", camposition, workspace:GetAttribute("Sync"), workspace:GetServerTimeNow())
         end
     end
-    
     arg1:Wait(getgenv().gatlingcooldown)
 end
 
@@ -64,7 +61,7 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "GatlingModGui"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 999999999 -- Guarantees the frame sits on top of other game UIs
+ScreenGui.DisplayOrder = 999999999
 ScreenGui.Parent = playerGui
 
 -- Toggle Button Fixed to Top Left Corner
@@ -84,10 +81,10 @@ ToggleCorner.CornerRadius = UDim.new(0, 6)
 ToggleCorner.Parent = ToggleButton
 ToggleButton.Parent = ScreenGui
 
--- Main Panel (Static Frame, moved only via Title)
+-- Main Panel (Adjusted height to 210 to fit everything nicely)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 160) -- Adjusted height to properly fit contents
+MainFrame.Size = UDim2.new(0, 260, 0, 210) 
 MainFrame.Position = UDim2.new(0.5, -130, 0.4, -120)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
@@ -97,12 +94,12 @@ local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = MainFrame
 
--- Frame Header Title (This acts as the drag handle - Anchored firmly at the top)
+-- Frame Header Title
 local TitleLabel = Instance.new("TextButton")
 TitleLabel.Name = "TitleLabel"
 TitleLabel.Size = UDim2.new(1, 0, 0, 35)
 TitleLabel.Position = UDim2.new(0, 0, 0, 0)
-TitleLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35) -- Slightly darker accent for header distinction
+TitleLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 TitleLabel.BorderSizePixel = 0
 TitleLabel.Text = "Gatling Gun Configuration"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -115,7 +112,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 8)
 TitleCorner.Parent = TitleLabel
 
--- Content Frame to house layout items safely under the Header
+-- Content Frame
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Name = "ContentFrame"
 ContentFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -231,16 +228,126 @@ local function createSliderRow(name, labelText, globalVar, minVal, maxVal, isDec
     Row.Parent = ContentFrame
 end
 
--- Slider rows generated now inside ContentFrame
 createSliderRow("CooldownSlider", "Cooldown Delay (Sec)", "gatlingcooldown", 0.01, 0.5, true, 1)
 createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100, false, 2)
 
--- 4. Open/Close Controller Connection
+-- 4. NPC ESP System Button Creation
+local EspButton = Instance.new("TextButton")
+EspButton.Name = "EspButton"
+EspButton.Size = UDim2.new(0, 230, 0, 35)
+EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Default Red (OFF)
+EspButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+EspButton.TextSize = 14
+EspButton.Font = Enum.Font.SourceSansBold
+EspButton.Text = "NPC ESP: OFF"
+EspButton.LayoutOrder = 3
+EspButton.Parent = ContentFrame
+
+local EspCorner = Instance.new("UICorner")
+EspCorner.CornerRadius = UDim.new(0, 6)
+EspCorner.Parent = EspButton
+
+-- 5. Core NPC ESP Backend Engine
+local npcFolder = workspace:WaitForChild("NPCs")
+local activeEsp = {}
+
+local function cleanEspOf(npc)
+    if activeEsp[npc] then
+        for _, object in pairs(activeEsp[npc]) do
+            if object then object:Destroy() end
+        end
+        activeEsp[npc] = nil
+    end
+end
+
+local function applyEsp(npc)
+    if not npc:IsA("Model") then return end
+    local humanoid = npc:WaitForChild("Humanoid", 5)
+    local rroot = npc:WaitForChild("HumanoidRootPart", 5)
+    if not humanoid or not rroot then return end
+
+    activeEsp[npc] = {}
+
+    -- Visual Highlight Box
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESPHighlight"
+    highlight.Adornee = npc
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.FillTransparency = 0.6
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = getgenv().npcesp
+    highlight.Parent = npc
+    table.insert(activeEsp[npc], highlight)
+
+    -- Overhead 2D Info Billboard
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESPTag"
+    billboard.Adornee = rroot
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = getgenv().npcesp
+    billboard.Parent = rroot
+    table.insert(activeEsp[npc], billboard)
+
+    local infoLabel = Instance.new("TextLabel")
+    infoLabel.Size = UDim2.new(1, 0, 1, 0)
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    infoLabel.TextSize = 14
+    infoLabel.Font = Enum.Font.SourceSansBold
+    infoLabel.TextStrokeTransparency = 0
+    infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    infoLabel.Parent = billboard
+
+    -- Dynamic Live Updating Loop
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not npc:IsDescendantOf(workspace) or not humanoid or humanoid.Health <= 0 or not getgenv().npcesp then
+            cleanEspOf(npc)
+            if connection then connection:Disconnect() end
+            return
+        end
+        infoLabel.Text = string.format("%s\n[HP: %d/%d]", npc.Name, math.round(humanoid.Health), math.round(humanoid.MaxHealth))
+    end)
+end
+
+-- Hook up existing NPCs and listener for future spawns
+for _, npc in pairs(npcFolder:GetChildren()) do
+    task.spawn(applyEsp, npc)
+end
+npcFolder.ChildAdded:Connect(function(npc)
+    task.spawn(applyEsp, npc)
+end)
+
+-- Esp UI Button Toggle Action
+EspButton.MouseButton1Click:Connect(function()
+    getgenv().npcesp = not getgenv().npcesp
+    if getgenv().npcesp then
+        EspButton.Text = "NPC ESP: ON"
+        EspButton.BackgroundColor3 = Color3.fromRGB(50, 150, 80) -- Green
+        for _, npc in pairs(npcFolder:GetChildren()) do
+            if not activeEsp[npc] then task.spawn(applyEsp, npc) end
+            if activeEsp[npc] then
+                for _, obj in pairs(activeEsp[npc]) do obj.Enabled = true end
+            end
+        end
+    else
+        EspButton.Text = "NPC ESP: OFF"
+        EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Red
+        for _, npc in pairs(npcFolder:GetChildren()) do
+            cleanEspOf(npc)
+        end
+    end
+end)
+
+-- 6. Open/Close Controller Connection
 ToggleButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
--- 5. Cross-Platform PC/Mobile Dragging Engine (Linked ONLY to TitleLabel)
+-- 7. Cross-Platform PC/Mobile Dragging Engine
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
