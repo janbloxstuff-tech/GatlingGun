@@ -247,12 +247,12 @@ local EspCorner = Instance.new("UICorner")
 EspCorner.CornerRadius = UDim.new(0, 6)
 EspCorner.Parent = EspButton
 
--- 5. Core NPC ESP Backend Engine (LAG-FREE FLICKER RECTIFIED CORES)
+-- 5. Core NPC ESP Backend Engine (LAG-FREE HIGH PERFORMANCE CORE V3)
 local npcFolder = workspace:WaitForChild("NPCs")
 local activeEsp = {}
 local cachedTables = {} 
 
--- Scans memory safely OUTSIDE of the frame engine loops
+-- High-speed garbage collector scanner running cleanly on independent threads
 local function scanGarbageCollectorFor(npc)
     if cachedTables[npc] then return cachedTables[npc] end
     
@@ -289,13 +289,13 @@ local function applyEsp(npc)
     cleanEspOf(npc)
     activeEsp[npc] = {}
 
-    -- Initial isolated off-thread data scan to avoid stuttering on load
+    -- Safe background daemon task loop to cleanly pull initialization data without frame stutter
+    local keepScanning = true
     task.spawn(function()
-        scanGarbageCollectorFor(npc)
-        -- If game didn't initialize table yet, retry once 0.3 seconds later instead of looping every frame
-        if not cachedTables[npc] then
-            task.wait(0.3)
-            scanGarbageCollectorFor(npc)
+        while keepScanning and npc:IsDescendantOf(workspace) do
+            local foundTable = scanGarbageCollectorFor(npc)
+            if foundTable then break end
+            task.wait(0.5) -- Low-frequency polling interval entirely removes spawn spikes
         end
     end)
 
@@ -332,10 +332,11 @@ local function applyEsp(npc)
     infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     infoLabel.Parent = billboard
 
-    -- Dynamic Live Updating Loop (Strictly Read-Only Data Streams)
+    -- Dynamic Live Updating Loop (Strictly Read-Only Pointer Processing)
     local connection
     connection = RunService.RenderStepped:Connect(function()
         if not npc:IsDescendantOf(workspace) or not getgenv().npcesp then
+            keepScanning = false
             cleanEspOf(npc)
             if connection then connection:Disconnect() end
             return
@@ -346,7 +347,7 @@ local function applyEsp(npc)
         
         local healthText = "[Loading...]"
         
-        -- Pull from instant memory link directly without iterating getgc inside loop
+        -- Instantaneous direct table verification layer
         local dataTable = cachedTables[npc]
         if dataTable and dataTable.Health then
             healthText = string.format("[HP: %d/%d]", math.round(dataTable.Health), math.round(dataTable.MaxHealth))
