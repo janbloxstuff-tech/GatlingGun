@@ -10,7 +10,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 getgenv().gatlingcooldown = 0.05
 getgenv().multiplytimes = 10
 getgenv().norecoil = true 
-getgenv().npcesp = false -- New ESP State Variable
+getgenv().npcesp = false 
 
 -- Hooks into game networking and animators
 local ggchannel = require(game:GetService("ReplicatedStorage").Resources.Universal.NewNetwork).Channel("GatlingGun")
@@ -81,7 +81,7 @@ ToggleCorner.CornerRadius = UDim.new(0, 6)
 ToggleCorner.Parent = ToggleButton
 ToggleButton.Parent = ScreenGui
 
--- Main Panel (Adjusted height to 210 to fit everything nicely)
+-- Main Panel (Adjusted height to fit everything nicely)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 260, 0, 210) 
@@ -235,7 +235,7 @@ createSliderRow("MultiplierSlider", "Bullet Multiplier", "multiplytimes", 1, 100
 local EspButton = Instance.new("TextButton")
 EspButton.Name = "EspButton"
 EspButton.Size = UDim2.new(0, 230, 0, 35)
-EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Default Red (OFF)
+EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
 EspButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 EspButton.TextSize = 14
 EspButton.Font = Enum.Font.SourceSansBold
@@ -262,22 +262,24 @@ end
 
 local function applyEsp(npc)
     if not npc:IsA("Model") then return end
+    
     local humanoid = npc:WaitForChild("Humanoid", 5)
     local rroot = npc:WaitForChild("HumanoidRootPart", 5)
     if not humanoid or not rroot then return end
 
+    cleanEspOf(npc)
     activeEsp[npc] = {}
 
-    -- Visual Highlight Box
+    -- Visual Highlight Box (Kept outside subfolder structures to bypass Roblox overflow bugs)
     local highlight = Instance.new("Highlight")
-    highlight.Name = "ESPHighlight"
+    highlight.Name = "ESPHighlight_" .. npc.Name
     highlight.Adornee = npc
     highlight.FillColor = Color3.fromRGB(255, 0, 0)
     highlight.FillTransparency = 0.6
     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
     highlight.OutlineTransparency = 0
     highlight.Enabled = getgenv().npcesp
-    highlight.Parent = npc
+    highlight.Parent = ScreenGui
     table.insert(activeEsp[npc], highlight)
 
     -- Overhead 2D Info Billboard
@@ -288,7 +290,7 @@ local function applyEsp(npc)
     billboard.StudsOffset = Vector3.new(0, 3.5, 0)
     billboard.AlwaysOnTop = true
     billboard.Enabled = getgenv().npcesp
-    billboard.Parent = rroot
+    billboard.Parent = ScreenGui
     table.insert(activeEsp[npc], billboard)
 
     local infoLabel = Instance.new("TextLabel")
@@ -313,12 +315,32 @@ local function applyEsp(npc)
     end)
 end
 
--- Hook up existing NPCs and listener for future spawns
-for _, npc in pairs(npcFolder:GetChildren()) do
-    task.spawn(applyEsp, npc)
+-- Deep scanner function that maps complex subfolder frameworks recursively
+local function processNPCFolder(folder)
+    for _, item in pairs(folder:GetChildren()) do
+        if item:IsA("Model") then
+            task.spawn(applyEsp, item)
+        elseif item:IsA("Folder") then
+            processNPCFolder(item)
+            item.ChildAdded:Connect(function(child)
+                if child:IsA("Model") then task.spawn(applyEsp, child) end
+            end)
+        end
+    end
 end
-npcFolder.ChildAdded:Connect(function(npc)
-    task.spawn(applyEsp, npc)
+
+processNPCFolder(npcFolder)
+
+-- Dynamic listener for completely new objects/subfolders added into NPCs later
+npcFolder.ChildAdded:Connect(function(child)
+    if child:IsA("Model") then
+        task.spawn(applyEsp, child)
+    elseif child:IsA("Folder") then
+        processNPCFolder(child)
+        child.ChildAdded:Connect(function(grandchild)
+            if grandchild:IsA("Model") then task.spawn(applyEsp, grandchild) end
+        end)
+    end
 end)
 
 -- Esp UI Button Toggle Action
@@ -326,17 +348,12 @@ EspButton.MouseButton1Click:Connect(function()
     getgenv().npcesp = not getgenv().npcesp
     if getgenv().npcesp then
         EspButton.Text = "NPC ESP: ON"
-        EspButton.BackgroundColor3 = Color3.fromRGB(50, 150, 80) -- Green
-        for _, npc in pairs(npcFolder:GetChildren()) do
-            if not activeEsp[npc] then task.spawn(applyEsp, npc) end
-            if activeEsp[npc] then
-                for _, obj in pairs(activeEsp[npc]) do obj.Enabled = true end
-            end
-        end
+        EspButton.BackgroundColor3 = Color3.fromRGB(50, 150, 80)
+        processNPCFolder(npcFolder)
     else
         EspButton.Text = "NPC ESP: OFF"
-        EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50) -- Red
-        for _, npc in pairs(npcFolder:GetChildren()) do
+        EspButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+        for npc, _ in pairs(activeEsp) do
             cleanEspOf(npc)
         end
     end
@@ -383,3 +400,4 @@ UserInputService.InputChanged:Connect(function(input)
         update(input)
     end
 end)
+
