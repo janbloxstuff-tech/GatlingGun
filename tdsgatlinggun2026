@@ -247,20 +247,18 @@ local EspCorner = Instance.new("UICorner")
 EspCorner.CornerRadius = UDim.new(0, 6)
 EspCorner.Parent = EspButton
 
--- 5. Core NPC ESP Backend Engine (LAG-FREE HIGH PERFORMANCE CORE V3)
+-- 5. Core NPC ESP Backend Engine (LAG-FREE HIGH PERFORMANCE OPTIMIZATION)
 local npcFolder = workspace:WaitForChild("NPCs")
 local activeEsp = {}
-local cachedTables = {} 
+local cachedTables = {} -- Memory pointer translation registry
 
--- High-speed garbage collector scanner running cleanly on independent threads
-local function scanGarbageCollectorFor(npc)
+-- Scans GC once on spawn, avoiding frame-by-frame loop overhead entirely
+local function locateNpcTable(npc)
     if cachedTables[npc] then return cachedTables[npc] end
     
     local pointer = npc:FindFirstChild("RootPointer")
     if pointer and pointer.Value then
-        local gcObjects = getgc(true)
-        for i = 1, #gcObjects do
-            local v = gcObjects[i]
+        for _, v in pairs(getgc(true)) do
             if typeof(v) == "table" and v.Model == npc and v.Health then
                 cachedTables[npc] = v
                 return v
@@ -288,16 +286,6 @@ local function applyEsp(npc)
 
     cleanEspOf(npc)
     activeEsp[npc] = {}
-
-    -- Safe background daemon task loop to cleanly pull initialization data without frame stutter
-    local keepScanning = true
-    task.spawn(function()
-        while keepScanning and npc:IsDescendantOf(workspace) do
-            local foundTable = scanGarbageCollectorFor(npc)
-            if foundTable then break end
-            task.wait(0.5) -- Low-frequency polling interval entirely removes spawn spikes
-        end
-    end)
 
     -- Visual Highlight Box
     local highlight = Instance.new("Highlight")
@@ -332,11 +320,10 @@ local function applyEsp(npc)
     infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     infoLabel.Parent = billboard
 
-    -- Dynamic Live Updating Loop (Strictly Read-Only Pointer Processing)
+    -- Dynamic Live Updating Loop (Optimized read paths)
     local connection
     connection = RunService.RenderStepped:Connect(function()
         if not npc:IsDescendantOf(workspace) or not getgenv().npcesp then
-            keepScanning = false
             cleanEspOf(npc)
             if connection then connection:Disconnect() end
             return
@@ -345,17 +332,23 @@ local function applyEsp(npc)
         local cleanName = npc.Name:gsub("Enemy", ""):gsub("Unit", "")
         if cleanName == "" or not cleanName then cleanName = "Enemy Target" end
         
-        local healthText = "[Loading...]"
+        local healthText = nil
         
-        -- Instantaneous direct table verification layer
-        local dataTable = cachedTables[npc]
+        -- High speed memory cache check
+        local dataTable = locateNpcTable(npc)
         if dataTable and dataTable.Health then
             healthText = string.format("[HP: %d/%d]", math.round(dataTable.Health), math.round(dataTable.MaxHealth))
         elseif npc:FindFirstChild("Humanoid") then
-            healthText = string.format("[HP: %d/%d]", math.round(npc.Humanoid.Health), math.round(npc.Humanoid.MaxHealth))
+            local humanoid = npc.Humanoid
+            healthText = string.format("[HP: %d/%d]", math.round(humanoid.Health), math.round(humanoid.MaxHealth))
         end
         
-        infoLabel.Text = string.format("%s\n%s", cleanName, healthText)
+        -- Formats UI text dynamically: displays only the name if health text is absent
+        if healthText then
+            infoLabel.Text = string.format("%s\n%s", cleanName, healthText)
+        else
+            infoLabel.Text = cleanName
+        end
     end)
 end
 
