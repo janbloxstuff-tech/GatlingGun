@@ -247,18 +247,20 @@ local EspCorner = Instance.new("UICorner")
 EspCorner.CornerRadius = UDim.new(0, 6)
 EspCorner.Parent = EspButton
 
--- 5. Core NPC ESP Backend Engine (LAG-FREE HIGH PERFORMANCE OPTIMIZATION)
+-- 5. Core NPC ESP Backend Engine (LAG-FREE FLICKER RECTIFIED CORES)
 local npcFolder = workspace:WaitForChild("NPCs")
 local activeEsp = {}
-local cachedTables = {} -- Memory pointer translation registry
+local cachedTables = {} 
 
--- Scans GC once on spawn, avoiding frame-by-frame loop overhead entirely
-local function locateNpcTable(npc)
+-- Scans memory safely OUTSIDE of the frame engine loops
+local function scanGarbageCollectorFor(npc)
     if cachedTables[npc] then return cachedTables[npc] end
     
     local pointer = npc:FindFirstChild("RootPointer")
     if pointer and pointer.Value then
-        for _, v in pairs(getgc(true)) do
+        local gcObjects = getgc(true)
+        for i = 1, #gcObjects do
+            local v = gcObjects[i]
             if typeof(v) == "table" and v.Model == npc and v.Health then
                 cachedTables[npc] = v
                 return v
@@ -286,6 +288,16 @@ local function applyEsp(npc)
 
     cleanEspOf(npc)
     activeEsp[npc] = {}
+
+    -- Initial isolated off-thread data scan to avoid stuttering on load
+    task.spawn(function()
+        scanGarbageCollectorFor(npc)
+        -- If game didn't initialize table yet, retry once 0.3 seconds later instead of looping every frame
+        if not cachedTables[npc] then
+            task.wait(0.3)
+            scanGarbageCollectorFor(npc)
+        end
+    end)
 
     -- Visual Highlight Box
     local highlight = Instance.new("Highlight")
@@ -320,7 +332,7 @@ local function applyEsp(npc)
     infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     infoLabel.Parent = billboard
 
-    -- Dynamic Live Updating Loop (Optimized read paths)
+    -- Dynamic Live Updating Loop (Strictly Read-Only Data Streams)
     local connection
     connection = RunService.RenderStepped:Connect(function()
         if not npc:IsDescendantOf(workspace) or not getgenv().npcesp then
@@ -330,10 +342,12 @@ local function applyEsp(npc)
         end
         
         local cleanName = npc.Name:gsub("Enemy", ""):gsub("Unit", "")
-        local healthText = "[Active Target]"
+        if cleanName == "" or not cleanName then cleanName = "Enemy Target" end
         
-        -- High speed memory cache check
-        local dataTable = locateNpcTable(npc)
+        local healthText = "[Loading...]"
+        
+        -- Pull from instant memory link directly without iterating getgc inside loop
+        local dataTable = cachedTables[npc]
         if dataTable and dataTable.Health then
             healthText = string.format("[HP: %d/%d]", math.round(dataTable.Health), math.round(dataTable.MaxHealth))
         elseif npc:FindFirstChild("Humanoid") then
