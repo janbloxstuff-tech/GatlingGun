@@ -247,24 +247,25 @@ local EspCorner = Instance.new("UICorner")
 EspCorner.CornerRadius = UDim.new(0, 6)
 EspCorner.Parent = EspButton
 
--- 5. Core NPC ESP Backend Engine (With Memory Scanner for Custom Health)
+-- 5. Core NPC ESP Backend Engine (LAG-FREE HIGH PERFORMANCE OPTIMIZATION)
 local npcFolder = workspace:WaitForChild("NPCs")
 local activeEsp = {}
+local cachedTables = {} -- Memory pointer translation registry
 
--- Safely search through garbage collector memory tables to extract hidden game values
-local function getInternalHealth(npc)
+-- Scans GC once on spawn, avoiding frame-by-frame loop overhead entirely
+local function locateNpcTable(npc)
+    if cachedTables[npc] then return cachedTables[npc] end
+    
     local pointer = npc:FindFirstChild("RootPointer")
     if pointer and pointer.Value then
         for _, v in pairs(getgc(true)) do
             if typeof(v) == "table" and v.Model == npc and v.Health then
-                return v.Health, v.MaxHealth
+                cachedTables[npc] = v
+                return v
             end
         end
     end
-    if npc:FindFirstChild("Humanoid") then
-        return npc.Humanoid.Health, npc.Humanoid.MaxHealth
-    end
-    return nil, nil
+    return nil
 end
 
 local function cleanEspOf(npc)
@@ -274,6 +275,7 @@ local function cleanEspOf(npc)
         end
         activeEsp[npc] = nil
     end
+    cachedTables[npc] = nil
 end
 
 local function applyEsp(npc)
@@ -318,7 +320,7 @@ local function applyEsp(npc)
     infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
     infoLabel.Parent = billboard
 
-    -- Dynamic Live Updating Loop
+    -- Dynamic Live Updating Loop (Optimized read paths)
     local connection
     connection = RunService.RenderStepped:Connect(function()
         if not npc:IsDescendantOf(workspace) or not getgenv().npcesp then
@@ -328,13 +330,14 @@ local function applyEsp(npc)
         end
         
         local cleanName = npc.Name:gsub("Enemy", ""):gsub("Unit", "")
-        local currentHp, maxHp = getInternalHealth(npc)
-        local healthText
+        local healthText = "[Active Target]"
         
-        if currentHp and maxHp then
-            healthText = string.format("[HP: %d/%d]", math.round(currentHp), math.round(maxHp))
-        else
-            healthText = "[Active Target]"
+        -- High speed memory cache check
+        local dataTable = locateNpcTable(npc)
+        if dataTable and dataTable.Health then
+            healthText = string.format("[HP: %d/%d]", math.round(dataTable.Health), math.round(dataTable.MaxHealth))
+        elseif npc:FindFirstChild("Humanoid") then
+            healthText = string.format("[HP: %d/%d]", math.round(npc.Humanoid.Health), math.round(npc.Humanoid.MaxHealth))
         end
         
         infoLabel.Text = string.format("%s\n%s", cleanName, healthText)
